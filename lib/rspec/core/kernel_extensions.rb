@@ -3,8 +3,10 @@ module Rspec
     module KernelExtensions
 
       unless respond_to?(:debugger)
-        # Start a debugging session if ruby-debug is loaded with the -u/--debugger option
+        # Start a debugging session if ruby-debug is loaded with the -d/--debug option
         def debugger(steps=1)
+          super(steps)
+        rescue NoMethodError
           # If not then just comment and proceed
           $stderr.puts "debugger statement ignored, use -d or --debug option on rspec to enable debugging"
         end
