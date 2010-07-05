@@ -6,7 +6,7 @@ Feature: mock with rr
   Scenario: Mock with rr
     Given a file named "rr_example_spec.rb" with:
       """
-      Rspec.configure do |config|
+      RSpec.configure do |config|
         config.mock_framework = :rr
       end
 
@@ -18,6 +18,6 @@ Feature: mock with rr
         end
       end
       """
-    When I run "rspec rr_example_spec.rb"
-    Then I should see "1 example, 0 failures" 
+    When I run "rspec ./rr_example_spec.rb"
+    Then the output should contain "1 example, 0 failures" 
     And the exit status should be 0

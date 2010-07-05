@@ -6,7 +6,7 @@ Feature: mock with flexmock
   Scenario: Mock with flexmock
     Given a file named "flexmock_example_spec.rb" with:
       """
-      Rspec.configure do |config|
+      RSpec.configure do |config|
         config.mock_framework = :flexmock
       end
 
@@ -18,6 +18,6 @@ Feature: mock with flexmock
         end
       end
       """
-    When I run "rspec flexmock_example_spec.rb"
-    Then I should see "1 example, 0 failures" 
+    When I run "rspec ./flexmock_example_spec.rb"
+    Then the output should contain "1 example, 0 failures" 
     And the exit status should be 0

@@ -1,11 +1,15 @@
-module Rspec
+module RSpec
   module Core
     class Metadata < Hash
 
       def initialize(superclass_metadata=nil)
         @superclass_metadata = superclass_metadata
-        update(@superclass_metadata) if @superclass_metadata
-        store(:example_group, {})
+        if @superclass_metadata
+          update(@superclass_metadata)
+          example_group = {:example_group => @superclass_metadata[:example_group]}
+        end
+
+        store(:example_group, example_group || {})
         store(:behaviour, self[:example_group])
         yield self if block_given?
       end
@@ -45,12 +49,12 @@ module Rspec
 #{"*"*50}
 :#{key} is not allowed
 
-Rspec reserves some hash keys for its own internal use, 
+RSpec reserves some hash keys for its own internal use, 
 including :#{key}, which is used on:
 
   #{caller(0)[4]}.
 
-Here are all of Rspec's reserved hash keys:
+Here are all of RSpec's reserved hash keys:
 
   #{RESERVED_KEYS.join("\n  ")}
 #{"*"*50}
@@ -78,36 +82,44 @@ EOM
       end
 
       def all_apply?(filters)
-        filters.all? do |filter_on, filter|
-          apply_condition(filter_on, filter)
+        filters.all? do |key, value|
+          apply_condition(key, value)
         end
       end
 
-      def apply_condition(filter_on, filter, metadata=nil)
+      def relevant_line_numbers(metadata)
+        line_numbers = [metadata[:line_number]]
+        if metadata[:example_group]
+          line_numbers + relevant_line_numbers(metadata[:example_group])
+        else
+          line_numbers
+        end
+      end
+
+      def apply_condition(key, value, metadata=nil)
         metadata ||= self
-        case filter
+        case value
         when Hash
-          filter.all? { |k, v| apply_condition(k, v, metadata[filter_on]) }
+          value.all? { |k, v| apply_condition(k, v, metadata[key]) }
         when Regexp
-          metadata[filter_on] =~ filter
+          metadata[key] =~ value
         when Proc
-          filter.call(metadata[filter_on]) rescue false
+          value.call(metadata[key]) rescue false
         when Fixnum
-          if filter_on == :line_number
-            [metadata[:line_number], metadata[:example_group][:line_number]].
-              include?(world.preceding_example_or_group_line(filter))
+          if key == :line_number
+            relevant_line_numbers(metadata).include?(world.preceding_declaration_line(value))
           else
-            metadata[filter_on] == filter
+            metadata[key] == value
           end
         else
-          metadata[filter_on] == filter
+          metadata[key] == value
         end
       end
 
     private
 
       def world
-        Rspec::Core.world
+        RSpec.world
       end
 
       def superclass_metadata
@@ -127,7 +139,7 @@ EOM
       end
 
       def described_class_from(args)
-        if args.first.is_a?(String)
+        if args.first.is_a?(String) || args.first.is_a?(Symbol)
           superclass_metadata[:example_group][:describes]
         else
           args.first

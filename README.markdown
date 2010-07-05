@@ -1,14 +1,14 @@
-# Rspec Core
+# RSpec Core
 
-Rspec is an automated testing framework for Ruby, designed for use in Behaviour
-Driven Development and Test Driven Development.
+Behaviour Driven Development for Ruby
 
-rspec-core includes the Rspec runner, output formatters, and the `rspec`
-command.
+## Upgrading from rspec-1.x
+
+See Upgrade.markdown
 
 ## Install
 
-    [sudo] gem install rspec --prerelease
+    gem install rspec --prerelease
 
 This will install the rspec, rspec-core, rspec-expectations and rspec-mocks
 gems.
@@ -16,7 +16,7 @@ gems.
 ## Get Started
 
 Start with a simple example of behavior you expect from your system. Do
-this before you write any code:
+this before you write any implementation code:
 
     # in spec/calculator_spec.rb
     describe Calculator, "add" do
@@ -42,7 +42,7 @@ Implement the simplest solution:
 Be sure to require the implementation file in the spec:
 
     # in spec/calculator_spec.rb
-    # - Rspec adds ./lib to the $LOAD_PATH, so you can
+    # - RSpec adds ./lib to the $LOAD_PATH, so you can
     #   just require "calculator" directly
     require "calculator"
 
@@ -63,17 +63,14 @@ Use the documentation formatter to see the resulting spec:
     Finished in 0.000379 seconds
     1 example, 0 failures
 
-## Configuration
+## Learn more
 
-You can define runtime configuration options in four places. They
-are loaded and processed in this order:
-
-* ~/.rspec
-* .rspec
-* RSpec.configure
-* command line
-
-Run `rspec --help` to see supported configuration options.
+While not comprehensive yet, you can learn quite a lot from the Cucumber
+features in the [features
+directory](http://github.com/rspec/rspec-core/tree/master/features/).  If there
+is a feature that is not documented there, or you find them insufficient to
+understand how to use a feature, please submit issues to
+[http://github.com/rspec/rspec-core/issues](http://github.com/rspec/rspec-core/issues).
 
 #### Also see
 

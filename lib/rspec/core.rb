@@ -1,26 +1,30 @@
+require 'rspec/core/kernel_extensions'
+require 'rspec/core/object_extensions'
 require 'rspec/core/load_path'
 require 'rspec/core/deprecation'
+require 'rspec/core/formatters'
 
 require 'rspec/core/hooks'
 require 'rspec/core/subject'
 require 'rspec/core/let'
 require 'rspec/core/metadata'
+require 'rspec/core/pending'
 
 require 'rspec/core/around_proxy'
 require 'rspec/core/world'
 require 'rspec/core/configuration'
+require 'rspec/core/option_parser'
 require 'rspec/core/configuration_options'
+require 'rspec/core/command_line'
+require 'rspec/core/drb_command_line'
 require 'rspec/core/runner'
 require 'rspec/core/example'
-require 'rspec/core/kernel_extensions'
 require 'rspec/core/shared_example_group'
 require 'rspec/core/example_group'
-require 'rspec/core/formatters'
-require 'rspec/core/backward_compatibility'
 require 'rspec/core/version'
 require 'rspec/core/errors'
 
-module Rspec
+module RSpec
   module Core
 
     def self.install_directory
@@ -28,23 +32,28 @@ module Rspec
     end
 
     def self.configuration
-      Rspec.deprecate('Rspec::Core.configuration', 'Rspec.configuration', '2.0.0')
-      Rspec.configuration
+      RSpec.deprecate('RSpec::Core.configuration', 'RSpec.configuration', '2.0.0')
+      RSpec.configuration
     end
 
     def self.configure
-      Rspec.deprecate('Rspec::Core.configure', 'Rspec.configure', '2.0.0')
-      yield Rspec.configuration if block_given?
+      RSpec.deprecate('RSpec::Core.configure', 'RSpec.configure', '2.0.0')
+      yield RSpec.configuration if block_given?
     end
 
     def self.world
-      @world ||= Rspec::Core::World.new
+      RSpec.deprecate('RSpec::Core.world', 'RSpec.world', '2.0.0')
+      RSpec.world
     end
 
   end
 
+  def self.world
+    @world ||= RSpec::Core::World.new
+  end
+
   def self.configuration
-    @configuration ||= Rspec::Core::Configuration.new
+    @configuration ||= RSpec::Core::Configuration.new
   end
 
   def self.configure
@@ -52,5 +61,9 @@ module Rspec
   end
 end
 
+require 'rspec/core/backward_compatibility'
+
 # TODO - make this configurable with default 'on'
 require 'rspec/expectations'
+
+require 'rspec/monkey'

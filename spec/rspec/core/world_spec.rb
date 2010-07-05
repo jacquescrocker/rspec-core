@@ -3,19 +3,18 @@ require 'spec_helper'
 class Bar; end
 class Foo; end
 
-module Rspec::Core
+module RSpec::Core
 
   describe World do
     
     before do
-      @world = Rspec::Core::World.new
-      Rspec::Core.stub(:world).and_return(@world)
+      @world = RSpec.world
     end
 
     describe "example_groups" do
     
       it "should contain all defined example groups" do
-        group = Rspec::Core::ExampleGroup.describe("group") {}
+        group = RSpec::Core::ExampleGroup.describe("group") {}
         @world.example_groups.should include(group)
       end
     
@@ -23,14 +22,14 @@ module Rspec::Core
     
     describe "applying inclusion filters" do
     
-      before(:all) do
+      before(:each) do
         options_1 = { :foo => 1, :color => 'blue', :feature => 'reporting' }
         options_2 = { :pending => true, :feature => 'reporting'  }
         options_3 = { :array => [1,2,3,4], :color => 'blue' }      
-        @bg1 = Rspec::Core::ExampleGroup.describe(Bar, "find group-1", options_1) { }
-        @bg2 = Rspec::Core::ExampleGroup.describe(Bar, "find group-2", options_2) { }
-        @bg3 = Rspec::Core::ExampleGroup.describe(Bar, "find group-3", options_3) { }
-        @bg4 = Rspec::Core::ExampleGroup.describe(Foo, "find these examples") do
+        @bg1 = RSpec::Core::ExampleGroup.describe(Bar, "find group-1", options_1) { }
+        @bg2 = RSpec::Core::ExampleGroup.describe(Bar, "find group-2", options_2) { }
+        @bg3 = RSpec::Core::ExampleGroup.describe(Bar, "find group-3", options_3) { }
+        @bg4 = RSpec::Core::ExampleGroup.describe(Foo, "find these examples") do
           it('I have no options') {}
           it("this is awesome", :awesome => true) {}
           it("this is too", :awesome => true) {}
@@ -117,36 +116,18 @@ module Rspec::Core
         @world.apply_exclusion_filters(group.examples, :name => /exclude/, "another_condition" => "foo").should == group.examples
         @world.apply_exclusion_filters(group.examples, :name => /exclude/, "another_condition" => "foo1").should == group.examples
       end
-      
     end
     
-    describe "filtering example groups" do
-      
-      it "should run matches" do
-        @group1 = ExampleGroup.describe(Bar, "find these examples") do
-          it('I have no options',       :color => :red, :awesome => true) {}
-          it("I also have no options",  :color => :red, :awesome => true) {}
-          it("not so awesome",          :color => :red, :awesome => false) {}
-        end
-        Rspec::Core.world.stub(:exclusion_filter).and_return({ :awesome => false })
-        Rspec::Core.world.stub(:filter).and_return({ :color => :red })
-        Rspec::Core.world.stub(:example_groups).and_return([@group1])
-        filtered_example_groups = @world.filtered_example_groups
-        filtered_example_groups.should == [@group1]
-        @group1.examples_to_run.should == @group1.examples[0..1]      
-      end
-      
-    end
 
-    describe "preceding_example_or_group_line" do
+    describe "preceding_declaration_line" do
       before(:each) do
         @group1_line = 10
         @group2_line = 20
         @group2_example1_line = 30
         @group2_example2_line = 40
         
-        @group1 = Rspec::Core::ExampleGroup.describe(Bar, "group-1") { }
-        @group2 = Rspec::Core::ExampleGroup.describe(Bar, "group-2") do
+        @group1 = RSpec::Core::ExampleGroup.describe(Bar, "group-1") { }
+        @group2 = RSpec::Core::ExampleGroup.describe(Bar, "group-2") do
           it('example 1') {}
           it("example 2") {}
         end
@@ -157,23 +138,23 @@ module Rspec::Core
       end
       
       it "should return nil if no example or group precedes the line" do 
-        @world.preceding_example_or_group_line(@group1_line-1).should == nil
+        @world.preceding_declaration_line(@group1_line-1).should == nil
       end
       
       it "should return the argument line number if a group starts on that line" do
-        @world.preceding_example_or_group_line(@group1_line).should == @group1_line
+        @world.preceding_declaration_line(@group1_line).should == @group1_line
       end
       
       it "should return the argument line number if an example starts on that line" do
-        @world.preceding_example_or_group_line(@group2_example1_line).should == @group2_example1_line
+        @world.preceding_declaration_line(@group2_example1_line).should == @group2_example1_line
       end
       
       it "should return line number of a group that immediately precedes the argument line" do
-        @world.preceding_example_or_group_line(@group2_line+1).should == @group2_line
+        @world.preceding_declaration_line(@group2_line+1).should == @group2_line
       end
       
       it "should return line number of an example that immediately precedes the argument line" do
-        @world.preceding_example_or_group_line(@group2_example1_line+1).should == @group2_example1_line        
+        @world.preceding_declaration_line(@group2_example1_line+1).should == @group2_example1_line        
       end
       
     end

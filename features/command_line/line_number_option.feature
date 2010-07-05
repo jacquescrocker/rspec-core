@@ -1,6 +1,6 @@
 Feature: line number option
 
-  As an Rspec user
+  As an RSpec user
   I want to run one example identified by the line number
   
   Scenario: standard examples
@@ -20,9 +20,9 @@ Feature: line number option
         
       end
       """
-    When I run "rspec example_spec.rb --line 5 --format doc"
-    Then I should see "1 example, 0 failures"
-    Then I should see "should be > 8"
+    When I run "rspec ./example_spec.rb --line 5 --format doc"
+    Then the output should contain "1 example, 0 failures"
+    Then the output should contain "should be > 8"
     But the stdout should not contain "should be < 10"
 
   Scenario: one liner
@@ -38,7 +38,7 @@ Feature: line number option
         
       end
       """
-    When I run "rspec example_spec.rb --line 5 --format doc"
-    Then I should see "1 example, 0 failures"
-    Then I should see "should be > 8"
+    When I run "rspec ./example_spec.rb --line 5 --format doc"
+    Then the output should contain "1 example, 0 failures"
+    Then the output should contain "should be > 8"
     But the stdout should not contain "should be < 10"

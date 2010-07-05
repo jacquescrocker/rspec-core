@@ -1,17 +1,16 @@
 Feature: halt
   
-  In an example, before hook, after hook, or around hook, you can
-  halt the current example, group, or suite based on arbitrary
-  criteria.
+  In an example, before or after hook, you can halt the current example, group,
+  or suite based on arbitrary criteria.
 
-  @wip
+@wip
   Scenario: halt group on failure
     Given a directory named "spec"
     And a file named "spec/example_spec.rb" with:
       """
-      Rspec.configure do |c|
+      RSpec.configure do |c|
         c.after(:each) do
-          running_example.halt(:group, :status => 'failed')
+          example.halt(:group, :status => 'failed')
         end
       end
       describe "something" do
@@ -23,5 +22,5 @@ Feature: halt
         end
       end
       """
-    When I run "rspec spec/example_spec.rb"
-    Then I should see "1 example, 1 failure"
+    When I run "rspec ./spec/example_spec.rb"
+    Then the output should contain "1 example, 1 failure"

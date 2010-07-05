@@ -1,8 +1,8 @@
-module Rspec
+module RSpec
   module Core
     class Example
 
-      attr_reader :metadata, :example_block
+      attr_reader :metadata, :options
 
       def self.delegate_to_metadata(*keys)
         keys.each do |key|
@@ -17,84 +17,107 @@ module Rspec
 
       def initialize(example_group_class, desc, options, example_block=nil)
         @example_group_class, @options, @example_block = example_group_class, options, example_block
-        @metadata = @example_group_class.metadata.for_example(desc, options)
+        @metadata  = @example_group_class.metadata.for_example(desc, options)
+        @exception = nil
+        @in_block  = false
       end
 
       def example_group
         @example_group_class
       end
 
-      alias_method :behaviour, :example_group
+      def behaviour
+        RSpec.deprecate("behaviour", "example_group")
+        example_group
+      end
+
+      def in_block?
+        @in_block
+      end
 
       def run(example_group_instance, reporter)
         @example_group_instance = example_group_instance
-        @example_group_instance.running_example = self
+        @example_group_instance.example = self
 
-        run_started
-
-        exception = nil
+        start(reporter)
 
         begin
-          run_before_each
-          pending_declared_in_example = catch(:pending_declared_in_example) do
-            if @example_group_class.around_eachs.empty?
-              @example_group_instance.instance_eval(&example_block) unless pending
-            else
-              @example_group_class.around_eachs.first.call(AroundProxy.new(self, &example_block))
-            end
-            throw :pending_declared_in_example, false
+          unless pending
+            with_around_hooks do
+              begin
+                run_before_each
+                @in_block = true
+                with_pending_capture &@example_block 
+              rescue Exception => e
+                @exception = e
+              ensure
+                @in_block = false
+                run_after_each
+              end
+              # FUCKME (DC): I really want to move the call below to the end of
+              # the with_around_hooks method, but it adds 4% to the run time.
+              # Why? (footnote - Dan North made me write this comment)
+            end.call
           end
         rescue Exception => e
-          exception = e
+          @exception ||= e
         ensure
+          @example_group_instance.example = nil
           assign_auto_description
         end
 
-        begin
-          run_after_each
-        rescue Exception => e
-          exception ||= e
-        ensure
-          @example_group_instance.running_example = nil
-        end
-
-        if exception
-          run_failed(reporter, exception) 
-        elsif pending_declared_in_example
-          run_pending(reporter, pending_declared_in_example)
-        elsif pending
-          run_pending(reporter, 'Not Yet Implemented')
-        else
-          run_passed(reporter) 
-        end
+        finish(reporter)
       end
 
     private
 
-      def run_started
-        record_results :started_at => Time.now
+      def with_pending_capture
+        @pending_declared_in_example = catch(:pending_declared_in_example) do
+          @example_group_instance.instance_eval(&@example_block)
+          throw :pending_declared_in_example, false
+        end
       end
 
-      def run_passed(reporter=nil)
-        run_finished reporter, 'passed'
-        true
+      def with_around_hooks(&wrapped_example)
+        around_hooks_for(@example_group_class).reverse.inject(wrapped_example) do |wrapper, hook|
+          def wrapper.run; call; end
+          lambda { @example_group_instance.instance_exec(wrapper, &hook) }
+        end
       end
 
-      def run_pending(reporter, message)
-        run_finished reporter, 'pending', :pending_message => message
-        true
+      def around_hooks_for(example_group_class)
+        (RSpec.configuration.hooks[:around][:each] + 
+          @example_group_class.ancestors.reverse.map{|a| a.hooks[:around][:each]}).flatten
       end
 
-      def run_failed(reporter, exception)
-        run_finished reporter, 'failed', :exception_encountered => exception
-        false
+      def start(reporter)
+        reporter.example_started(self)
+        record :started_at => Time.now
       end
 
-      def run_finished(reporter, status, results={})
-        record_results results.update(:status => status)
-        finish_time = Time.now
-        record_results :finished_at => finish_time, :run_time => (finish_time - execution_result[:started_at])
-        reporter.example_finished(self)
+      def finish(reporter)
+        if @exception
+          record_finished 'failed', :exception_encountered => @exception
+          reporter.example_failed self
+          false
+        elsif @pending_declared_in_example
+          record_finished 'pending', :pending_message => @pending_declared_in_example
+          reporter.example_pending self
+          true
+        elsif pending
+          record_finished 'pending', :pending_message => 'Not Yet Implemented'
+          reporter.example_pending self
+          true
+        else
+          record_finished 'passed'
+          reporter.example_passed self
+          true
+        end
+      end
+
+      def record_finished(status, results={})
+        finished_at = Time.now
+        record results.merge(:status => status, :finished_at => finished_at, :run_time => (finished_at - execution_result[:started_at]))
       end
 
       def run_before_each
@@ -111,12 +134,12 @@ module Rspec
 
       def assign_auto_description
         if description.empty?
-          metadata[:description] = Rspec::Matchers.generated_description 
-          Rspec::Matchers.clear_generated_description
+          metadata[:description] = RSpec::Matchers.generated_description 
+          RSpec::Matchers.clear_generated_description
         end
       end
 
-      def record_results(results={})
+      def record(results={})
         execution_result.update(results)
       end
 

@@ -3,7 +3,7 @@
 require 'rake'
 require 'rake/tasklib'
 
-module Rspec
+module RSpec
   module Core
 
     class RakeTask < ::Rake::TaskLib
@@ -35,40 +35,37 @@ module Rspec
       # Use rcov for code coverage? defaults to false
       attr_accessor :rcov
 
+      # Path to rcov.  You can set this to 'bundle exec rcov' if you bundle rcov.
+      attr_accessor :rcov_path
+
       # The options to pass to rcov.  Defaults to blank
       attr_accessor :rcov_opts
 
       def initialize(*args)
         @name = args.shift || :spec
-        @pattern, @rcov_opts, @ruby_opts = nil, nil, nil
+        @pattern, @rcov_path, @rcov_opts, @ruby_opts = nil, nil, nil, nil
         @warning, @rcov = false, false
         @fail_on_error = true
 
         yield self if block_given?
+        @rcov_path ||= 'rcov'
         @pattern ||= './spec/**/*_spec.rb'
         define
       end
 
       def define # :nodoc:
         actual_name = Hash === name ? name.keys.first : name
-        desc("Run Rspec code examples") unless ::Rake.application.last_comment
+        desc("Run RSpec code examples") unless ::Rake.application.last_comment
 
         task name do
           RakeFileUtils.send(:verbose, verbose) do
             if files_to_run.empty?
               puts "No examples matching #{pattern} could be found"
             else
-              cmd_parts = [rcov ? 'rcov' : RUBY]
-              cmd_parts += rcov ? [rcov_opts] : [ruby_opts]
-              cmd_parts << '-Ilib'
-              cmd_parts << '-Ispec'
-              cmd_parts << "-w" if warning
-              cmd_parts += files_to_run.collect { |fn| %["#{fn}"] }
-              cmd = cmd_parts.join(" ")
-              puts cmd if verbose
-              unless system(cmd)
+              puts spec_command.inspect if verbose
+              unless system(spec_command)
                 STDERR.puts failure_message if failure_message
-                raise("Command #{cmd} failed") if fail_on_error
+                raise("#{spec_command} failed") if fail_on_error
               end
             end
           end
@@ -81,6 +78,31 @@ module Rspec
         FileList[ pattern ].to_a
       end
 
+    private
+
+      def spec_command
+        @spec_command ||= begin
+                            cmd_parts = %w[-Ilib -Ispec]
+                            cmd_parts << "-w" if warning
+                            cmd_parts.unshift runner_options
+                            cmd_parts.unshift runner
+                            cmd_parts.unshift bundler
+                            cmd_parts += files_to_run.map { |fn| %["#{fn}"] }
+                            cmd_parts.join(" ")
+                          end
+      end
+
+      def runner
+        rcov ? rcov_path : RUBY
+      end
+
+      def runner_options
+        rcov ? [rcov_opts] : [ruby_opts]
+      end
+
+      def bundler
+        File.exist?("./Gemfile") ? "bundle exec " : ""
+      end
     end
 
   end

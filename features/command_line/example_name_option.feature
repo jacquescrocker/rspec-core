@@ -24,31 +24,49 @@ Feature: example name option
         it "second example in second group" do; end
       end
       """
+    Given a file named "third_spec.rb" with:
+      """
+      describe "third group" do
+        it "first example in third group" do; end
+        context "nested group" do
+          it "first example in nested group" do; end
+          it "second example in nested group" do; end
+        end
+      end
+      """
 
   Scenario: no matches
     When I run "rspec . --example nothing_like_this"
-    Then I should see "0 examples, 0 failures"
+    Then the output should contain "0 examples, 0 failures"
 
-  Scenario: all matches
+  Scenario: match on one word
     When I run "rspec . --example example"
-    Then I should see "4 examples, 0 failures"
+    Then the output should contain "7 examples, 0 failures"
 
-  Scenario: one match in each file
+  Scenario: one match in each context
     When I run "rspec . --example 'first example'"
-    Then I should see "2 examples, 0 failures"
+    Then the output should contain "4 examples, 0 failures"
 
-  Scenario: one match in one file
+  Scenario: one match in one file using just the example name
     When I run "rspec . --example 'first example in first group'"
-    Then I should see "1 example, 0 failures"
+    Then the output should contain "1 example, 0 failures"
+
+  Scenario: one match in one file using the example name and the group name
+    When I run "rspec . --example 'first group first example in first group'"
+    Then the output should contain "1 example, 0 failures"
 
   Scenario: one match in one file using regexp
     When I run "rspec . --example 'first .* first example'"
-    Then I should see "1 example, 0 failures"
+    Then the output should contain "1 example, 0 failures"
 
   Scenario: all examples in one group
     When I run "rspec . --example 'first group'"
-    Then I should see "2 examples, 0 failures"
+    Then the output should contain "2 examples, 0 failures"
 
   Scenario: one match in one file with group name
     When I run "rspec . --example 'second group first example'"
-    Then I should see "1 example, 0 failures"
+    Then the output should contain "1 example, 0 failures"
+
+  Scenario: all examples in one group including examples in nested groups
+    When I run "rspec . --example 'third group'"
+    Then the output should contain "3 examples, 0 failures"

@@ -1,19 +1,25 @@
-module Rspec
+module RSpec
   module Core
     module SharedExampleGroup
       
       def share_examples_for(name, &block)
         ensure_shared_example_group_name_not_taken(name)
-        Rspec::Core.world.shared_example_groups[name] = block
+        RSpec.world.shared_example_groups[name] = block
       end
 
       def share_as(name, &block)
         if Object.const_defined?(name)
-          raise NameError, "The first argument (#{name}) to share_as must be a legal name for a constant not already in use."
+          mod = Object.const_get(name)
+          raise_name_error unless mod.created_from_caller(caller)
         end
         
         mod = Module.new do
           @shared_block = block
+          @caller_line = caller.last
+
+          def self.created_from_caller(other_caller)
+            @caller_line == other_caller.last
+          end
 
           def self.included(kls)
             kls.module_eval(&@shared_block)
@@ -21,15 +27,19 @@ module Rspec
         end
 
         shared_const = Object.const_set(name, mod)
-        Rspec::Core.world.shared_example_groups[shared_const] = block
+        RSpec.world.shared_example_groups[shared_const] = block
       end
 
       alias :shared_examples_for :share_examples_for
 
     private
 
+      def raise_name_error
+        raise NameError, "The first argument (#{name}) to share_as must be a legal name for a constant not already in use."
+      end
+
       def ensure_shared_example_group_name_not_taken(name)
-        if Rspec::Core.world.shared_example_groups.has_key?(name)
+        if RSpec.world.shared_example_groups.has_key?(name)
           raise ArgumentError.new("Shared example group '#{name}' already exists")
         end
       end
@@ -38,4 +48,4 @@ module Rspec
   end
 end
 
-include Rspec::Core::SharedExampleGroup
+include RSpec::Core::SharedExampleGroup

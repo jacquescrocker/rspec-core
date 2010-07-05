@@ -6,7 +6,7 @@ Feature: mock with mocha
   Scenario: Mock with mocha
     Given a file named "mocha_example_spec.rb" with:
       """
-      Rspec.configure do |config|
+      RSpec.configure do |config|
         config.mock_framework = :mocha
       end
 
@@ -18,6 +18,6 @@ Feature: mock with mocha
         end
       end
       """
-    When I run "rspec mocha_example_spec.rb"
-    Then I should see "1 example, 0 failures" 
+    When I run "rspec ./mocha_example_spec.rb"
+    Then the output should contain "1 example, 0 failures" 
     And the exit status should be 0

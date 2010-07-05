@@ -1,24 +1,26 @@
-module Rspec
-
+module RSpec
   module Core
-
     module Formatters
 
       class BaseTextFormatter < BaseFormatter
+
+        def message(message)
+          output.puts message
+        end
 
         def dump_failures
           output.puts
           failed_examples.each_with_index do |failed_example, index|
             exception = failed_example.execution_result[:exception_encountered]
             padding = '    '
-            if exception.is_a?(Rspec::Core::PendingExampleFixedError)
+            if exception.is_a?(RSpec::Core::PendingExampleFixedError)
               output.puts "#{index.next}) #{failed_example} FIXED"
               output.puts "#{padding}Expected pending '#{failed_example.metadata[:execution_result][:pending_message]}' to fail. No Error was raised."
             else
               output.puts "#{index.next}) #{failed_example}"
               output.puts "#{padding}Failure/Error: #{read_failed_line(exception, failed_example).strip}"
               exception.message.split("\n").each do |line|
-                output.puts "#{padding}#{colorise(line, exception).strip}"
+                output.puts "#{padding}#{red(line)}"
               end
             end
 
@@ -27,49 +29,42 @@ module Rspec
             end
 
             output.puts 
-            output.flush
           end
         end
 
-        def colorise(s, failure)
-          red(s)
+        def colorise_summary(summary)
+          if failure_count == 0
+            if pending_count > 0
+              yellow(summary)
+            else
+              green(summary)
+            end
+          else
+            red(summary)
+          end
         end
         
         def dump_summary
-          failure_count = failed_examples.size
-          pending_count = pending_examples.size
-          
+          output.puts "\nFinished in #{format_seconds(duration)} seconds\n"
 
-            output.puts "\nFinished in #{format_seconds(duration)} seconds\n"
-
-          summary = "#{example_count} example#{'s' unless example_count == 1}, #{failure_count} failures"
-          summary << ", #{pending_count} pending" if pending_count > 0  
-
-          if failure_count == 0
-            if pending_count > 0
-              output.puts yellow(summary)
-            else
-              output.puts green(summary)
-            end
-          else
-            output.puts red(summary)
-          end
+          output.puts colorise_summary(summary_line(example_count, failure_count, pending_count))
 
           # Don't print out profiled info if there are failures, it just clutters the output
           if profile_examples? && failure_count == 0
             sorted_examples = examples.sort_by { |example| example.execution_result[:run_time] }.reverse.first(10)
             output.puts "\nTop #{sorted_examples.size} slowest examples:\n"        
             sorted_examples.each do |example|
-              output.puts "  (#{format_seconds(duration, 7)} seconds) #{example}"
-              output.puts grey("   # #{format_caller(example.metadata[:caller])}")
+              output.puts "  (#{format_seconds(example.execution_result[:run_time])} seconds) #{example}"
+              output.puts grey("   # #{format_caller(example.metadata[:location])}")
             end
           end
-
-          output.flush
         end
 
-        def format_caller(caller_info)
-          caller_info.to_s.split(':in `block').first
+        def summary_line(example_count, failure_count, pending_count)
+          summary = pluralize(example_count, "example")
+          summary << ", " << pluralize(failure_count, "failure")
+          summary << ", #{pending_count} pending" if pending_count > 0  
+          summary
         end
 
         def dump_pending
@@ -81,20 +76,16 @@ module Rspec
               output.puts grey("   # #{format_caller(pending_example.metadata[:location])}")
             end
           end
-          output.flush
         end
 
         def close
-          if IO === output && output != $stdout
-            output.close 
-          end
+          output.close if IO === output && output != $stdout
         end
 
-        protected
+      protected
 
         def color(text, color_code)
-          return text unless color_enabled?
-          "#{color_code}#{text}\e[0m"
+          color_enabled? ? "#{color_code}#{text}\e[0m" : text
         end
 
         def bold(text)
@@ -129,10 +120,18 @@ module Rspec
           color(text, "\e[90m")
         end
 
+      private
+
+        def pluralize(count, string)
+          "#{count} #{string}#{'s' unless count == 1}"
+        end
+
+        def format_caller(caller_info)
+          caller_info.to_s.split(':in `block').first
+        end
+
       end
 
     end
-
   end
-
 end

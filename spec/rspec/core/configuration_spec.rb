@@ -1,6 +1,6 @@
 require 'spec_helper'
 
-module Rspec::Core
+module RSpec::Core
 
   describe Configuration do
 
@@ -40,7 +40,7 @@ module Rspec::Core
    
     context "setting the files to run" do
 
-      it "should load files not following pattern if named explicitly" do
+      it "loads files not following pattern if named explicitly" do
         file = "./spec/rspec/core/resources/a_bar.rb"
         config.files_or_directories_to_run = file
         config.files_to_run.should == [file]
@@ -48,10 +48,16 @@ module Rspec::Core
 
       describe "with default --pattern" do
 
-        it "should load files named _spec.rb" do
+        it "loads files named _spec.rb" do
           dir = "./spec/rspec/core/resources"
           config.files_or_directories_to_run = dir
           config.files_to_run.should == ["#{dir}/a_spec.rb"]
+        end
+
+        it "loads files in Windows" do
+          file = "C:\\path\\to\\project\\spec\\sub\\foo_spec.rb"
+          config.files_or_directories_to_run = file
+          config.files_to_run.should == [file]
         end
 
       end
@@ -134,20 +140,23 @@ module Rspec::Core
 
       context "with no filter" do
         it "includes the given module into each example group" do
-          config.include(InstanceLevelMethods)
-          
-          group = ExampleGroup.describe(config, 'does like, stuff and junk', :magic_key => :include) { }
+          RSpec.configure do |c|
+            c.include(InstanceLevelMethods)
+          end
+
+          group = ExampleGroup.describe('does like, stuff and junk', :magic_key => :include) { }
           group.should_not respond_to(:you_call_this_a_blt?)
           group.new.you_call_this_a_blt?.should == "egad man, where's the mayo?!?!?"
         end
-        
       end
 
       context "with a filter" do
         it "includes the given module into each matching example group" do
-          config.include(InstanceLevelMethods, :magic_key => :include)
-          
-          group = ExampleGroup.describe(config, 'does like, stuff and junk', :magic_key => :include) { }
+          RSpec.configure do |c|
+            c.include(InstanceLevelMethods, :magic_key => :include)
+          end
+
+          group = ExampleGroup.describe('does like, stuff and junk', :magic_key => :include) { }
           group.should_not respond_to(:you_call_this_a_blt?)
           group.new.you_call_this_a_blt?.should == "egad man, where's the mayo?!?!?"
         end
@@ -163,8 +172,11 @@ module Rspec::Core
       end
 
       it "should extend the given module into each matching example group" do
-        config.extend(ThatThingISentYou, :magic_key => :extend)      
-        group = ExampleGroup.describe(config, ThatThingISentYou, :magic_key => :extend) { }
+        RSpec.configure do |c|
+          c.extend(ThatThingISentYou, :magic_key => :extend)      
+        end
+
+        group = ExampleGroup.describe(ThatThingISentYou, :magic_key => :extend) { }
         group.should respond_to(:that_thing)
       end
 
@@ -181,6 +193,55 @@ module Rspec::Core
         config.run_all_when_everything_filtered?.should == true
       end
     end
+
+    describe 'color_enabled=' do
+      context "given true" do
+        context "on windows" do
+          before do
+            @original_host  = Config::CONFIG['host_os']
+            Config::CONFIG['host_os'] = 'mswin'
+            config.stub(:require)
+            config.stub(:warn)
+          end
+
+          after do
+            Config::CONFIG['host_os'] = @original_host
+          end
+
+          context "with win32console available" do
+            it "requires win32console" do
+              config.should_receive(:require).
+                with("Win32/Console/ANSI")
+              config.color_enabled = true
+            end
+
+            it "leaves output stream intact" do
+              config.output_stream = $stdout
+              config.stub(:require) do |what|
+                config.output_stream = 'foo' if what =~ /Win32/
+              end
+              config.color_enabled = true
+              config.output_stream.should eq($stdout)
+            end
+          end
+
+          context "with win32console NOT available" do
+            it "warns to install win32console" do
+              config.stub(:require) { raise LoadError }
+              config.should_receive(:warn).
+                with /You must 'gem install win32console'/
+              config.color_enabled = true
+            end
+
+            it "sets color_enabled to false" do
+              config.stub(:require) { raise LoadError }
+              config.color_enabled = true
+              config.color_enabled.should be_false
+            end
+          end
+        end
+      end
+    end
     
     describe 'formatter=' do
 
@@ -190,11 +251,43 @@ module Rspec::Core
         config.formatter = 'documentation'
         config.formatter.should be_an_instance_of(Formatters::DocumentationFormatter)
       end
+
+      it "sets a formatter based on its class" do
+        formatter_class = Class.new(Formatters::BaseTextFormatter)
+        config.formatter = formatter_class
+        config.formatter.should be_an_instance_of(formatter_class)
+      end
       
+      it "sets a formatter based on its class name" do
+        Object.const_set("CustomFormatter", Class.new(Formatters::BaseFormatter))
+        config.formatter = "CustomFormatter"
+        config.formatter.should be_an_instance_of(CustomFormatter)
+      end
+
+      it "sets a formatter based on its class fully qualified name" do
+        RSpec.const_set("CustomFormatter", Class.new(Formatters::BaseFormatter))
+        config.formatter = "RSpec::CustomFormatter"
+        config.formatter.should be_an_instance_of(RSpec::CustomFormatter)
+      end
+
       it "raises ArgumentError if formatter is unknown" do
         lambda { config.formatter = :progresss }.should raise_error(ArgumentError)
       end
       
+    end
+
+    describe "#filter_run" do
+      it "sets the filter" do
+        config.filter_run :focus => true
+        config.filter.should eq({:focus => true})
+      end
+    end
+
+    describe "#filter_run_excluding" do
+      it "sets the filter" do
+        config.filter_run_excluding :slow => true
+        config.exclusion_filter.should eq({:slow => true})
+      end
     end
 
     describe "line_number=" do
@@ -202,13 +295,13 @@ module Rspec::Core
         config.line_number = '37'
         config.filter.should == {:line_number => 37}
       end
-      
+
       it "overrides :focused" do
         config.filter_run :focused => true
         config.line_number = '37'
         config.filter.should == {:line_number => 37}
       end
-      
+
       it "prevents :focused" do
         config.line_number = '37'
         config.filter_run :focused => true
@@ -220,6 +313,14 @@ module Rspec::Core
       it "clears the backtrace clean patterns" do
         config.full_backtrace = true
         config.backtrace_clean_patterns.should == []
+      end
+
+      it "doesn't impact other instances of config" do
+        config_1 = Configuration.new
+        config_2 = Configuration.new
+
+        config_1.full_backtrace = true
+        config_2.backtrace_clean_patterns.should_not be_empty
       end
     end
 
@@ -237,16 +338,11 @@ module Rspec::Core
       end
     end
 
-    context "transactional examples" do
-      it "defaults to use transactional examples" do
-        config.use_transactional_examples?.should be_true
-      end
-
-      describe "#use_transactional_examples=" do
-        it "remembers that I don't want transactional exmaples" do
-          config.use_transactional_examples = false
-          config.use_transactional_examples?.should be_false
-        end
+    describe "#output=" do
+      it "sets the output" do
+        output = mock("output")
+        config.output = output
+        config.output.should equal(output)
       end
     end
 
@@ -257,6 +353,81 @@ module Rspec::Core
       end
     end
 
-  end
+    describe "requires=" do
+      it "requires paths" do
+        config.should_receive(:require).with("a/path")
+        config.requires = ["a/path"]
+      end
+    end
 
+    describe "#add_setting" do
+      describe "with no modifiers" do
+        context "with no additional options" do
+          before { config.add_setting :custom_option }
+
+          it "defaults to nil" do
+            config.custom_option.should be_nil
+          end
+
+          it "adds a predicate" do
+            config.custom_option?.should be_false
+          end
+
+          it "can be overridden" do
+            config.custom_option = "a value"
+            config.custom_option.should eq("a value")
+          end
+        end
+
+        context "with :default => 'a value'" do
+          before { config.add_setting :custom_option, :default => 'a value' }
+
+          it "defaults to 'a value'" do
+            config.custom_option.should eq("a value")
+          end
+
+          it "returns true for the predicate" do
+            config.custom_option?.should be_true
+          end
+
+          it "can be overridden with a truthy value" do
+            config.custom_option = "a new value"
+            config.custom_option.should eq("a new value")
+          end
+
+          it "can be overridden with nil" do
+            config.custom_option = nil
+            config.custom_option.should eq(nil)
+          end
+
+          it "can be overridden with false" do
+            config.custom_option = false
+            config.custom_option.should eq(false)
+          end
+        end
+      end
+
+      context "with :alias => " do
+        before do
+          config.add_setting :custom_option
+          config.add_setting :another_custom_option, :alias => :custom_option
+        end
+
+        it "delegates the getter to the other option" do
+          config.another_custom_option = "this value"
+          config.custom_option.should == "this value"
+        end
+
+        it "delegates the setter to the other option" do
+          config.custom_option = "this value"
+          config.another_custom_option.should == "this value"
+        end
+
+        it "delegates the predicate to the other option" do
+          config.custom_option = true
+          config.another_custom_option?.should be_true
+        end
+      end
+    end
+  end
 end

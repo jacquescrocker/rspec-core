@@ -1,8 +1,8 @@
-module Rspec
+module RSpec
   
   class << self
     def deprecate(method, alternate_method=nil, version=nil)
-      version_string = version ? "rspec-#{version}" : "a future version of Rspec" 
+      version_string = version ? "rspec-#{version}" : "a future version of RSpec" 
 
       message = <<-NOTICE
 
@@ -21,13 +21,12 @@ ADDITIONAL
       end
 
       message << "*****************************************************************"
-      warn(message)
+      warn_deprecation(message)
     end
 
-    def warn(message)
-      Kernel.warn(message)
+    def warn_deprecation(message)
+      send :warn, message
     end
-
   end
 
   class HashWithDeprecationNotice < Hash
@@ -37,7 +36,7 @@ ADDITIONAL
     end
   
     def []=(k,v)
-      Rspec.deprecate(@method, @alternate_method)
+      RSpec.deprecate(@method, @alternate_method)
       super
     end
   

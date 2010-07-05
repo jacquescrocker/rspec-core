@@ -1,69 +1,111 @@
-module Rspec
+require "rbconfig"
+
+module RSpec
   module Core
     class Configuration
-      # Control what examples are run by filtering 
-      attr_accessor :filter
+      include RSpec::Core::Hooks
 
-      # Control what examples are not run by filtering 
-      attr_accessor :exclusion_filter
-
-      # Run all examples if the run is filtered, and no examples were found.
-      attr_writer :run_all_when_everything_filtered
-
-      attr_reader :options
-
-      def initialize
-        @run_all_when_everything_filtered = false
-        @hooks = { 
-          :before => { :each => [], :all => [], :suite => [] }, 
-          :after => { :each => [], :all => [], :suite => [] } 
-        }
-        @include_or_extend_modules = []
-        @filter, @exclusion_filter = nil, nil
-        @options = default_options
+      def self.add_setting(name, opts={})
+        if opts[:alias]
+          alias_method name, opts[:alias]
+          alias_method "#{name}=", "#{opts[:alias]}="
+          alias_method "#{name}?", "#{opts[:alias]}?"
+        else
+          define_method("#{name}=") {|val| settings[name] = val}
+          define_method(name)       { settings.has_key?(name) ? settings[name] : opts[:default] }
+          define_method("#{name}?") { !!(send name) }
+        end
       end
-      
-      def default_options
-        {
-          :color_enabled => false,
-          :mock_framework => nil,
-          :use_transactional_examples => true,
-          :profile_examples => false,
-          :files_to_run => [],
-          :filename_pattern => '**/*_spec.rb',
-          :formatter_class => Rspec::Core::Formatters::ProgressFormatter,
-          :backtrace_clean_patterns => [/\/lib\/ruby\//, 
-                                        /bin\/rcov:/, 
-                                        /vendor\/rails/, 
-                                        /bin\/rspec/, 
-                                        /bin\/spec/,
-                                        /lib\/rspec\/(core|expectations|matchers|mocks)/]
-        }
+
+      add_setting :error_stream
+      add_setting :output_stream
+      add_setting :output, :alias => :output_stream
+      add_setting :drb
+      add_setting :drb_port
+      add_setting :color_enabled
+      add_setting :profile_examples
+      add_setting :run_all_when_everything_filtered
+      add_setting :mock_framework, :default => :rspec
+      add_setting :filter
+      add_setting :exclusion_filter
+      add_setting :filename_pattern, :default => '**/*_spec.rb'
+      add_setting :files_to_run, :default => []
+      add_setting :include_or_extend_modules, :default => []
+      add_setting :formatter_class, :default => RSpec::Core::Formatters::ProgressFormatter
+      add_setting :backtrace_clean_patterns, :default => [
+        /\/lib\/ruby\//, 
+        /bin\/rcov:/, 
+        /vendor\/rails/, 
+        /bin\/rspec/, 
+        /bin\/spec/,
+        /lib\/rspec\/(core|expectations|matchers|mocks)/
+      ]
+
+      # :call-seq:
+      #   add_setting(:name)
+      #   add_setting(:name, :default => "default_value")
+      #   add_setting(:name, :alias => :other_setting)
+      #
+      # Use this to add custom settings to the RSpec.configuration object. 
+      #
+      #   RSpec.configuration.add_setting :foo
+      #
+      # Creates three methods on the configuration object, a setter, a getter,
+      # and a predicate:
+      #
+      #   RSpec.configuration.foo=(value)
+      #   RSpec.configuration.foo()
+      #   RSpec.configuration.foo?() # returns !!foo
+      #
+      # Intended for extension frameworks like rspec-rails, so they can add config
+      # settings that are domain specific. For example:
+      #
+      #   RSpec.configure do |c|
+      #     c.add_setting :use_transactional_fixtures, :default => true
+      #     c.add_setting :use_transactional_examples, :alias => :use_transactional_fixtures
+      #   end
+      #
+      # == Options
+      # 
+      # +add_setting+ takes an optional hash that supports the following
+      # keys:
+      #
+      #   :default => "default value"
+      #
+      # This sets the default value for the getter and the predicate (which
+      # will return +true+ as long as the value is not +false+ or +nil+).
+      #
+      #   :alias => :other_setting
+      #
+      # Aliases its setter, getter, and predicate, to those for the
+      # +other_setting+.
+      def add_setting(name, opts={})
+        self.class.add_setting(name, opts)
       end
-      
+
+      def puts(message)
+        output_stream.puts(message)
+      end
+
+      def settings
+        @settings ||= {}
+      end
+
+      def clear_inclusion_filter # :nodoc:
+        self.filter = nil
+      end
+
       def cleaned_from_backtrace?(line)
-        @options[:backtrace_clean_patterns].any? { |regex| line =~ regex }
+        backtrace_clean_patterns.any? { |regex| line =~ regex }
       end
 
-      def backtrace_clean_patterns
-        @options[:backtrace_clean_patterns]
+      def mock_with(mock_framework)
+        settings[:mock_framework] = mock_framework
       end
 
-      def mock_framework=(use_me_to_mock)
-        @options[:mock_framework] = use_me_to_mock
-      end
-
-      def use_transactional_examples=(value)
-        @options[:use_transactional_examples] = value
-      end
-
-      def use_transactional_examples?
-        @options[:use_transactional_examples]
-      end
-      
       def require_mock_framework_adapter
-        require case @options[:mock_framework].to_s
-        when "", /rspec/i
+        require case mock_framework.to_s
+        when /rspec/i
           'rspec/core/mocking/with_rspec'
         when /mocha/i
           'rspec/core/mocking/with_mocha'
@@ -76,24 +118,32 @@ module Rspec
         end 
       end
 
-      def filename_pattern
-        @options[:filename_pattern]
-      end
-
-      def filename_pattern=(new_pattern)
-        @options[:filename_pattern] = new_pattern
-      end 
-
-      def color_enabled=(on_or_off)
-        @options[:color_enabled] = on_or_off
-      end
-
       def full_backtrace=(bool)
-        @options[:backtrace_clean_patterns].clear
+        settings[:backtrace_clean_patterns] = []
+      end
+
+      def color_enabled=(bool)
+        return unless bool
+        settings[:color_enabled] = true
+        if bool && ::Config::CONFIG['host_os'] =~ /mswin|mingw/
+          orig_output_stream = settings[:output_stream]
+          begin
+            require 'Win32/Console/ANSI'
+          rescue LoadError
+            warn "You must 'gem install win32console' to use colour on Windows"
+            settings[:color_enabled] = false
+          ensure
+            settings[:output_stream] = orig_output_stream
+          end
+        end
       end
 
       def libs=(libs)
         libs.map {|lib| $LOAD_PATH.unshift lib}
+      end
+
+      def requires=(paths)
+        paths.map {|path| require path}
       end
 
       def debug=(bool)
@@ -114,10 +164,6 @@ EOM
         end
       end
 
-      def color_enabled?
-        @options[:color_enabled]
-      end
-
       def line_number=(line_number)
         filter_run :line_number => line_number.to_i
       end
@@ -126,113 +172,92 @@ EOM
         filter_run :full_description => /#{description}/
       end
       
-      # Enable profiling of example run - defaults to false
-      def profile_examples
-        @options[:profile_examples]
-      end
-      
-      def profile_examples=(on_or_off)
-        @options[:profile_examples] = on_or_off
-      end
-     
-      def formatter_class
-        @options[:formatter_class]
-      end
-     
       def formatter=(formatter_to_use)
-        formatter_class = case formatter_to_use.to_s
-        when 'd', 'doc', 'documentation', 's', 'n', 'spec', 'nested'
-          Rspec::Core::Formatters::DocumentationFormatter
-        when 'progress' 
-          Rspec::Core::Formatters::ProgressFormatter
-        else 
-          raise ArgumentError, "Formatter '#{formatter_to_use}' unknown - maybe you meant 'documentation' or 'progress'?."
+        if string_const?(formatter_to_use) && (class_name = eval(formatter_to_use)).is_a?(Class)
+          formatter_class = class_name
+        elsif formatter_to_use.is_a?(Class)
+          formatter_class = formatter_to_use
+        else
+          formatter_class = case formatter_to_use.to_s
+          when 'd', 'doc', 'documentation', 's', 'n', 'spec', 'nested'
+            RSpec::Core::Formatters::DocumentationFormatter
+          when 'h', 'html'
+            RSpec::Core::Formatters::HtmlFormatter
+          when 'progress' 
+            RSpec::Core::Formatters::ProgressFormatter
+          else 
+            raise ArgumentError, "Formatter '#{formatter_to_use}' unknown - maybe you meant 'documentation' or 'progress'?."
+          end
         end
-        @options[:formatter_class] = formatter_class
+        self.formatter_class = formatter_class
       end
-        
+      
+      def string_const?(str)
+        str.is_a?(String) && /\A[A-Z][a-zA-Z0-9_:]*\z/ =~ str
+      end
+      
       def formatter
-        @formatter ||= formatter_class.new
+        @formatter ||= formatter_class.new(output)
       end
-      
-      def files_to_run
-        @options[:files_to_run]
-      end
-      
+
+      alias_method :reporter, :formatter
+
       def files_or_directories_to_run=(*files)
-        @options[:files_to_run] = files.flatten.inject([]) do |result, file|
+        self.files_to_run = files.flatten.collect do |file|
           if File.directory?(file)
-            filename_pattern.split(",").each do |pattern|
-              result += Dir["#{file}/#{pattern.strip}"]
+            filename_pattern.split(",").collect do |pattern|
+              Dir["#{file}/#{pattern.strip}"]
             end
           else
-            path, line_number = file.split(':')
-            self.line_number = line_number if line_number
-            result << path
+            if file =~ /(\:(\d+))$/
+              self.line_number = $2
+              file.sub($1,'')
+            else
+              file
+            end
           end
-          result
-        end
+        end.flatten
       end
 
       # E.g. alias_example_to :crazy_slow, :speed => 'crazy_slow' defines
       # crazy_slow as an example variant that has the crazy_slow speed option
       def alias_example_to(new_name, extra_options={})
-        Rspec::Core::ExampleGroup.alias_example_to(new_name, extra_options)
+        RSpec::Core::ExampleGroup.alias_example_to(new_name, extra_options)
       end
 
-      def filter_run(options={})
-        @filter = options unless @filter and @filter[:line_number] || @filter[:full_description]
+      def filter_run_including(options={})
+        # TODO (DC 2010-07-03) this should probably warn when the unless clause returns true
+        self.filter = options unless filter and filter[:line_number] || filter[:full_description]
       end
 
-      def run_all_when_everything_filtered?
-        @run_all_when_everything_filtered
+      alias_method :filter_run, :filter_run_including
+
+      def filter_run_excluding(options={})
+        self.exclusion_filter = options
       end
 
-      def output
-        $stdout
+      def include(mod, filters={})
+        include_or_extend_modules << [:include, mod, filters]
       end
 
-      def puts(msg="")
-        output.puts(msg)    
-      end
-
-      def include(mod, options={})
-        @include_or_extend_modules << [:include, mod, options]
-      end
-
-      def extend(mod, options={})
-        @include_or_extend_modules << [:extend, mod, options]
+      def extend(mod, filters={})
+        include_or_extend_modules << [:extend, mod, filters]
       end
 
       def find_modules(group)
-        @include_or_extend_modules.select do |include_or_extend, mod, filters|
+        include_or_extend_modules.select do |include_or_extend, mod, filters|
           group.all_apply?(filters)
         end
       end
 
-      def before(each_or_all=:each, options={}, &block)
-        @hooks[:before][each_or_all] << [options, block]
-      end
-
-      def after(each_or_all=:each, options={}, &block)
-        @hooks[:after][each_or_all] << [options, block]
-      end
-
-      def find_hook(hook, each_or_all, group)
-        @hooks[hook][each_or_all].select do |filters, block|
-          group.all_apply?(filters)
-        end.map { |filters, block| block }
-      end
-
       def configure_mock_framework
         require_mock_framework_adapter
-        Rspec::Core::ExampleGroup.send(:include, Rspec::Core::MockFrameworkAdapter)
+        RSpec::Core::ExampleGroup.send(:include, RSpec::Core::MockFrameworkAdapter)
       end
 
       def require_files_to_run
-        files_to_run.map {|f| require f }
+        files_to_run.map {|f| require File.expand_path(f) }
       end
-
     end
   end
 end

@@ -1,61 +1,52 @@
-module Rspec
+require 'drb/drb'
+
+module RSpec
   module Core
     class Runner
+
+      def self.at_exit_hook_disabled?
+        @no_at_exit_hook ||= false
+      end
+
+      def self.disable_at_exit_hook!
+        @no_at_exit_hook = true
+      end
 
       def self.installed_at_exit?
         @installed_at_exit ||= false
       end
 
       def self.autorun
-        return if installed_at_exit?
+        return if at_exit_hook_disabled? || installed_at_exit? || running_in_drb?
         @installed_at_exit = true
-        at_exit { new.run(ARGV) ? exit(0) : exit(1) } 
+        at_exit { run(ARGV, $stderr, $stdout) ? exit(0) : exit(1) }
       end
 
-      def configuration
-        Rspec.configuration
+      def self.running_in_drb?
+        (DRb.current_server rescue false) &&
+        !!((DRb.current_server.uri) =~ /druby\:\/\/127.0.0.1\:/)
       end
 
-      def reporter
-        configuration.formatter
-      end
+      def self.run(args, err, out)
+        options = ConfigurationOptions.new(args)
+        options.parse_options
 
-      def run(args = [])
-        configure(args)
-        
-        reporter.report(example_count) do |reporter|
-          example_groups.run_all(reporter)
-        end
-        
-        example_groups.success?
-      end
-      
-    private
-
-      def configure(args)
-        Rspec::Core::ConfigurationOptions.new(args).apply_to(configuration)
-        configuration.require_files_to_run
-        configuration.configure_mock_framework
-      end
-
-      def example_count
-        Rspec::Core.world.total_examples_to_run
-      end
-
-      def example_groups
-        Rspec::Core.world.example_groups_to_run.extend(ExampleGroups)
-      end
-
-      module ExampleGroups
-        def run_all(reporter)
-          @success = self.inject(true) {|success, group| success &= group.run(reporter)}
-        end
-
-        def success?
-          @success ||= false
+        if options.options[:drb]
+          run_over_drb(options, err, out) || run_in_process(options, err, out)
+        else
+          run_in_process(options, err, out)
         end
       end
-      
+
+      def self.run_over_drb(options, err, out)
+        DRbCommandLine.new(options).run(err, out)
+      end
+
+      def self.run_in_process(options, err, out)
+        CommandLine.new(options, RSpec::configuration, RSpec::world).run(err, out)
+      end
+
     end
+
   end
 end

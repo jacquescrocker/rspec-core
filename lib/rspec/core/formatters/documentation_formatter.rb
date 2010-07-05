@@ -1,58 +1,49 @@
-module Rspec
-
+module RSpec
   module Core
-
     module Formatters
 
       class DocumentationFormatter < BaseTextFormatter
 
-        def initialize
-          super
+        def initialize(output)
+          super(output)
           @previous_nested_example_groups = []
         end
 
         def add_example_group(example_group)
           super
 
-          described_example_group_chain.each_with_index do |nested_example_group, i|
+          example_group_chain.each_with_index do |nested_example_group, i|
             unless nested_example_group == @previous_nested_example_groups[i]
               output.puts if i == 0
               output.puts "#{'  ' * i}#{nested_example_group.description}"
             end
           end
 
-          @previous_nested_example_groups = described_example_group_chain
+          @previous_nested_example_groups = example_group_chain
         end
         
-        def output_for(example)
-          case example.execution_result[:status]
-          when 'failed'
-            failure_output(example, example.execution_result[:exception_encountered])
-          when 'pending'
-            pending_output(example, example.execution_result[:pending_message])
-          when 'passed'
-            passed_output(example)
-          else
-            red(example.execution_result[:status])
-          end
+        def example_passed(example)
+          super
+          output.puts passed_output(example)
         end
 
-        def example_finished(example)
+        def example_pending(example)
           super
-          output.puts output_for(example)
-          output.flush
+          output.puts pending_output(example, example.execution_result[:pending_message])
+        end
+
+        def example_failed(example)
+          super
+          output.puts failure_output(example, example.execution_result[:exception_encountered])
         end
 
         def failure_output(example, exception)
-          expectation_not_met = exception.is_a?(::Rspec::Expectations::ExpectationNotMetError)
+          red("#{current_indentation}#{example.description} (FAILED - #{next_failure_index})")
+        end
 
-          message = if expectation_not_met
-            "#{current_indentation}#{example.description} (FAILED)"
-          else
-            "#{current_indentation}#{example.description} (ERROR)"
-          end
-
-          expectation_not_met ? red(message) : magenta(message)
+        def next_failure_index
+          @next_failure_index ||= 0
+          @next_failure_index += 1
         end
 
         def passed_output(example)
@@ -67,14 +58,12 @@ module Rspec
           '  ' * @previous_nested_example_groups.size
         end
 
-        def described_example_group_chain
-          example_group.ancestor_example_groups
+        def example_group_chain
+          example_group.ancestors.reverse
         end
 
       end
 
     end
-
   end
-
 end

@@ -10,7 +10,7 @@ Feature: custom formatters
       """
       require "rspec/runner/formatter/base_formatter"
 
-      class CustomFormatter < Spec::Runner::Formatter::BaseFormatter
+      class CustomFormatter < RSpec::Runner::Formatter::BaseFormatter
         def initialize(options, output)
           @output = output
         end
@@ -27,6 +27,6 @@ Feature: custom formatters
       end
       """
 
-    When I run "rspec simple_example_spec.rb --require custom_formatter.rb --format CustomFormatter"
-    Then I should see "example: my example"
+    When I run "rspec ./simple_example_spec.rb --require custom_formatter.rb --format CustomFormatter"
+    Then the output should contain "example: my example"
     And  the exit status should be 0

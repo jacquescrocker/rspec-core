@@ -1,35 +1,38 @@
-module Rspec
+module RSpec
   module Core
     module Formatters
 
       class BaseFormatter
         include Helpers
         attr_accessor :example_group
-        attr_reader :example_count, :duration, :examples
+        attr_reader :example_count, :duration, :examples, :output
 
-        def initialize
+        def initialize(output)
+          @output = output
           @example_count = 0
           @examples = []
           @example_group = nil
         end
 
-        def output
-          configuration.output
+        def pending_examples
+          @pending_examples ||= ::RSpec.world.find(examples, :execution_result => { :status => 'pending' })
         end
 
-        def pending_examples
-          @pending_examples ||= ::Rspec::Core.world.find(examples, :execution_result => { :status => 'pending' })
+        def pending_count
+          pending_examples.size
         end
 
         def failed_examples
-          @failed_examples ||= ::Rspec::Core.world.find(examples, :execution_result => { :status => 'failed' })
+          @failed_examples ||= ::RSpec.world.find(examples, :execution_result => { :status => 'failed' })
+        end
+
+        def failure_count
+          failed_examples.size
         end
 
         def report(count)
           sync_output do
             start(count)
-            # TODO - spec that we still dump even when there's
-            # an exception
             begin
               yield self
             ensure
@@ -55,14 +58,27 @@ module Rspec
           @duration = Time.now - @start
         end
 
-        def example_finished(example)
+        def example_started(example)
           examples << example
+        end
+
+        def example_passed(example)
+        end
+
+        def example_pending(example)
+        end
+
+        def example_failed(example)
+        end
+
+        def message(message)
         end
 
         # This method is invoked at the beginning of the execution of each example group.
         # +example_group+ is the example_group.
         #
-        # The next method to be invoked after this is #example_failed or #example_finished
+        # The next method to be invoked after this is +example_passed+,
+        # +example_pending+, or +example_finished+
         def add_example_group(example_group)
           @example_group = example_group
         end
@@ -109,7 +125,7 @@ module Rspec
       protected
 
         def configuration
-          Rspec.configuration
+          RSpec.configuration
         end
 
         def backtrace_line(line)

@@ -1,8 +1,9 @@
 require "spec_helper"
 
-describe Rspec::Core::Formatters::BaseFormatter do
+describe RSpec::Core::Formatters::BaseFormatter do
   
-  let(:formatter) { Rspec::Core::Formatters::BaseFormatter.new }
+  let(:output)    { StringIO.new }
+  let(:formatter) { RSpec::Core::Formatters::BaseFormatter.new(output) }
 
   it "has start as an interface with one argument" do
     formatter.should have_interface_for(:start).with(1).argument
@@ -12,8 +13,16 @@ describe Rspec::Core::Formatters::BaseFormatter do
     formatter.should have_interface_for(:add_example_group).with(1).argument
   end
 
-  it "has example_finished as an interface with one argument" do
-    formatter.should have_interface_for(:example_finished).with(1).arguments
+  it "has example_passed as an interface with one argument" do
+    formatter.should have_interface_for(:example_passed).with(1).arguments
+  end
+
+  it "has example_pending as an interface with one argument" do
+    formatter.should have_interface_for(:example_pending).with(1).arguments
+  end
+
+  it "has example_failed as an interface with one argument" do
+    formatter.should have_interface_for(:example_failed).with(1).arguments
   end
 
   it "has start_dump as an interface with 1 arguments" do

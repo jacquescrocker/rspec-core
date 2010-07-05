@@ -1,48 +1,81 @@
-module Rspec
+module RSpec
   module Core
     module Hooks
-      def before_blocks
-        @before_blocks ||= { :all => [], :each => [] }
+      class Hook
+        attr_reader :options
+
+        def initialize(options, block)
+          @options = options
+          @block = block
+        end
+
+        def options_apply?(group)
+          !group || group.all_apply?(options)
+        end
+
+        def call
+          @block.call
+        end
+
+        def to_proc
+          @block
+        end
       end
 
-      def after_blocks
-        @after_blocks  ||= { :all => [], :each => [] }
+      def hooks
+        @hooks ||= { 
+          :around => { :each => [] },
+          :before => { :each => [], :all => [], :suite => [] }, 
+          :after => { :each => [], :all => [], :suite => [] } 
+        }
       end
 
-      def around_blocks
-        @around_blocks ||= { :each => [] }
+      def before(scope=:each, options={}, &block)
+        hooks[:before][scope] << Hook.new(options, block)
       end
 
-      def before_eachs
-        before_blocks[:each]
+      def after(scope=:each, options={}, &block)
+        hooks[:after][scope] << Hook.new(options, block)
       end
 
-      def before_alls
-        before_blocks[:all]
+      def around(scope=:each, &block)
+        hooks[:around][scope] << block
       end
 
-      def before(type=:each, &block)
-        before_blocks[type] << block
+      # Runs all of the blocks stored with the hook in the context of the
+      # example. If no example is provided, just calls the hook directly.
+      def run_hook(hook, scope, example=nil, options={})
+        if options[:reverse]
+          hooks[hook][scope].reverse.each &run_hook_in(example)
+        else
+          hooks[hook][scope].each &run_hook_in(example)
+        end
       end
 
-      def after_eachs
-        after_blocks[:each]
+      # Just like run_hook, except it removes the blocks as it evalutes them,
+      # ensuring that they will only be run once.
+      def run_hook!(hook, scope, example, options={})
+        until hooks[hook][scope].empty?
+          if options[:reverse] 
+            example.instance_eval &hooks[hook][scope].shift
+          else
+            example.instance_eval &hooks[hook][scope].pop
+          end
+        end
       end
 
-      def after_alls
-        after_blocks[:all]
+      def run_hook_filtered(hook, scope, group, example)
+        find_hook(hook, scope, group).each &run_hook_in(example)
       end
 
-      def after(type=:each, &block)
-        after_blocks[type] << block
+      def find_hook(hook, scope, group)
+        hooks[hook][scope].select {|hook| hook.options_apply?(group)}
       end
 
-      def around_eachs
-        around_blocks[:each]
-      end
+    private
 
-      def around(type=:each, &block)
-        around_blocks[type] << block
+      def run_hook_in(example)
+        lambda {|hook| example ? example.instance_eval(&hook) : hook.call}
       end
     end
   end

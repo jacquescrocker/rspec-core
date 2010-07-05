@@ -1,10 +1,35 @@
 require 'spec_helper'
+
 require 'ostruct'
 
-describe Rspec::Core::ConfigurationOptions do
+describe RSpec::Core::ConfigurationOptions do
   
+  def config_options_object(*args)
+    coo = RSpec::Core::ConfigurationOptions.new(args)
+    coo.parse_options
+    coo
+  end
+
   def options_from_args(*args)
-    Rspec::Core::ConfigurationOptions.new(args).parse_command_line_options
+    config_options_object(*args).options
+  end
+
+  describe "#configure" do
+    it "sends libs before requires" do
+      opts = config_options_object(*%w[--require a/path -I a/lib])
+      config = double("config").as_null_object
+      config.should_receive(:libs=).ordered
+      config.should_receive(:requires=).ordered
+      opts.configure(config)
+    end
+    
+    it "sends requires before formatter" do
+      opts = config_options_object(*%w[--require a/path -f a/formatter])
+      config = double("config").as_null_object
+      config.should_receive(:requires=).ordered
+      config.should_receive(:formatter=).ordered
+      opts.configure(config)
+    end
   end
 
   describe 'color_enabled' do
@@ -28,11 +53,24 @@ describe Rspec::Core::ConfigurationOptions do
     end
   end
 
-  describe  'formatter' do
-    example '-f or --formatter with an argument should parse' do
-      options_from_args('--formatter', 'd').should include(:formatter => 'd')
+  describe '--require' do
+    example "--requires files" do
+      options_from_args('--require', 'a/path').should include(:requires => ['a/path'])
+    end
+    example "--require can be used more than once" do
+      options_from_args('--require', 'path/1', '--require', 'path/2').should include(:requires => ['path/1','path/2'])
+    end
+  end
+
+  describe  'format' do
+    example '-f or --format with an argument should parse' do
+      options_from_args('--format', 'd').should include(:formatter => 'd')
       options_from_args('-f', 'd').should include(:formatter => 'd')
       options_from_args('-fd').should include(:formatter => 'd')
+    end
+
+    example "-f/--format can accept a class name" do
+      options_from_args('-fSome::Formatter::Class').should include(:formatter => 'Some::Formatter::Class')
     end
   end
 
@@ -77,6 +115,16 @@ describe Rspec::Core::ConfigurationOptions do
       options_from_args("dir", "spec/file1_spec.rb", "spec/file2_spec.rb").should include(:files_or_directories_to_run => ["dir", "spec/file1_spec.rb", "spec/file2_spec.rb"])
     end
 
+    it "provides no files or directories if spec directory does not exist" do
+      FileTest.stub(:directory?).with("spec").and_return false
+      options_from_args().should include(:files_or_directories_to_run => [])
+    end
+
+    it "parses dir and files from 'spec/file1_spec.rb, spec/file2_spec.rb'" do
+      options_from_args("dir", "spec/file1_spec.rb", "spec/file2_spec.rb").should include(:files_or_directories_to_run => ["dir", "spec/file1_spec.rb", "spec/file2_spec.rb"])
+      
+    end
+
   end
 
   describe "--backtrace (-b)" do
@@ -92,25 +140,108 @@ describe Rspec::Core::ConfigurationOptions do
       options_from_args("-d").should include(:debug => true)
     end
   end
+  
+  describe "--drb (-X)" do
+    context "combined with --debug" do
+      it "turns off the debugger if --drb is specified first" do
+        config_options_object("--drb", "--debug").drb_argv.should_not include("--debug")
+        config_options_object("--drb", "-d"     ).drb_argv.should_not include("--debug")
+        config_options_object("-X",    "--debug").drb_argv.should_not include("--debug")
+        config_options_object("-X",    "-d"     ).drb_argv.should_not include("--debug")
+      end
+      
+      it "turns off the debugger option if --drb is specified later" do      
+        config_options_object("--debug", "--drb").drb_argv.should_not include("--debug")
+        config_options_object("-d",      "--drb").drb_argv.should_not include("--debug")
+        config_options_object("--debug", "-X"   ).drb_argv.should_not include("--debug")
+        config_options_object("-d",      "-X"   ).drb_argv.should_not include("--debug")
+      end
+      
+      it "turns off the debugger option if --drb is specified in the options file" do
+        File.stub(:exist?) { true }
+        File.stub(:readlines) { %w[ --drb  ] }
+        config_options_object("--debug").drb_argv.should_not include("--debug")
+        config_options_object("-d"     ).drb_argv.should_not include("--debug")        
+      end
+      
+      it "turns off the debugger option if --debug is specified in the options file" do
+        File.stub(:exist?) { true }
+        File.stub(:readlines) { %w[ --debug  ] }
+        config_options_object("--drb").drb_argv.should_not include("--debug")
+        config_options_object("-X"   ).drb_argv.should_not include("--debug")        
+      end
+    end
+        
+    it "sends all the arguments other than --drb back to the parser after parsing options" do
+      config_options_object("--drb", "--color").drb_argv.should_not include("--drb")
+    end
+  end
+  
+  
+  # TODO #drb_argv may not be the best name
+  # TODO ensure all options are output
+  # TODO check if we need to spec that the short options are "expanded" ("-v" becomes "--version" currently)
+  describe "#drb_argv" do
+    it "preserves extra arguments" do
+      File.stub(:exist?) { false }
+      config_options_object(*%w[ a --drb b --color c ]).drb_argv.should =~ %w[ --color a b c ]
+    end
+    
+    context "--drb specified in ARGV" do
+      it "renders all the original arguments except --drb" do
+        config_options_object(*%w[ --drb --color --format s --line_number 1 --example pattern --profile --backtrace -I path/a -I path/b --require path/c --require path/d]).
+          drb_argv.should eq(%w[ --color --profile --backtrace --format s --line_number 1 --example pattern -I path/a -I path/b --require path/c --require path/d])
+      end
+    end
+
+    context "--drb specified in the options file" do
+      it "renders all the original arguments except --drb" do
+        File.stub(:exist?) { true }
+        File.stub(:readlines) { %w[ --drb --color ] }
+        config_options_object(*%w[ --format s --line_number 1 --example pattern --profile --backtrace ]).
+          drb_argv.should eq(%w[ --color --profile --backtrace --format s --line_number 1 --example pattern ])
+      end
+    end
+
+    context "--drb specified in ARGV and the options file" do
+      it "renders all the original arguments except --drb" do
+        File.stub(:exist?) { true }
+        File.stub(:readlines) { %w[ --drb --color ] }
+        config_options_object(*%w[ --drb --format s --line_number 1 --example pattern --profile --backtrace]).
+          drb_argv.should eq(%w[ --color --profile --backtrace --format s --line_number 1 --example pattern ])
+      end
+    end
+
+    context "--drb specified in ARGV and in as ARGV-specified --options file" do
+      it "renders all the original arguments except --drb and --options" do
+        File.stub(:exist?) { true }
+        File.stub(:readlines) { %w[ --drb --color ] }
+        config_options_object(*%w[ --drb --format s --line_number 1 --example pattern --profile --backtrace]).
+          drb_argv.should eq(%w[ --color --profile --backtrace --format s --line_number 1 --example pattern ])
+      end
+    end
+  end
 
   describe "options file (override)" do
     let(:config) { OpenStruct.new }
 
     it "loads automatically" do
       File.stub(:exist?) { true }
-      File.stub(:readlines) { ["--formatter", "doc"] }
+      File.stub(:readlines) { ["--format", "doc"] }
 
-      cli_options = Rspec::Core::ConfigurationOptions.new([])
-      cli_options.apply_to(config)
+      config_options = RSpec::Core::ConfigurationOptions.new([])
+      config_options.parse_options
+      config_options.configure(config)
       config.formatter.should == 'doc'
     end
     
     it "allows options on one line" do
       File.stub(:exist?) { true }
-      File.stub(:readlines) { ["--formatter doc"] }
+      File.stub(:readlines) { ["--format doc"] }
 
-      cli_options = Rspec::Core::ConfigurationOptions.new([])
-      cli_options.apply_to(config)
+      config_options = RSpec::Core::ConfigurationOptions.new([])
+      config_options.parse_options
+      config_options.configure(config)
       config.formatter.should == 'doc'
     end
     
@@ -119,16 +250,17 @@ describe Rspec::Core::ConfigurationOptions do
       File.stub(:readlines) do |path|
         case path
         when ".rspec"
-          ["--formatter", "documentation"] 
+          ["--format", "documentation"] 
         when /\.rspec/
           ["--line", "37"]
         else
           raise "Unexpected path: #{path}"
         end
       end
-      cli_options = Rspec::Core::ConfigurationOptions.new(["--no-color"])
+      config_options = RSpec::Core::ConfigurationOptions.new(["--no-color"])
+      config_options.parse_options
 
-      cli_options.apply_to(config)
+      config_options.configure(config)
 
       config.formatter.should == "documentation"
       config.line_number.should == "37"
@@ -140,29 +272,51 @@ describe Rspec::Core::ConfigurationOptions do
       File.stub(:readlines) do |path|
         case path
         when ".rspec"
-          ["--formatter", "local"] 
+          ["--format", "local"] 
         when /\.rspec/
-          ["--formatter", "global"] 
+          ["--format", "global"] 
         else
           raise "Unexpected path: #{path}"
         end
       end
-      cli_options = Rspec::Core::ConfigurationOptions.new([])
+      config_options = RSpec::Core::ConfigurationOptions.new([])
+      config_options.parse_options
 
-      cli_options.apply_to(config)
+      config_options.configure(config)
 
       config.formatter.should == "local"
     end
 
     it "prefers CLI options over file options" do
-      config_options = Rspec::Core::ConfigurationOptions.new(['--formatter', 'progress'])
+      config_options = RSpec::Core::ConfigurationOptions.new(['--format', 'progress'])
       config_options.stub(:parse_options_file).and_return(:formatter => 'documentation')
 
-      config_options.apply_to(config)
+      config_options.parse_options
+      config_options.configure(config)
 
       config.formatter.should == 'progress'
     end
-  end
 
+    context "with SPEC_OPTS" do
+      before do
+        @orig_spec_opts = ENV["SPEC_OPTS"]
+      end
+
+      after do
+        ENV["SPEC_OPTS"] = @orig_spec_opts
+      end
+
+      it "prefers SPEC_OPTS options over file options" do
+        config = OpenStruct.new
+        ENV["SPEC_OPTS"] = "--format documentation"
+        config_options = RSpec::Core::ConfigurationOptions.new(['--format', 'progress'])
+
+        config_options.parse_options
+        config_options.configure(config)
+
+        config.formatter.should == 'documentation'
+      end
+    end
+  end
 end
 

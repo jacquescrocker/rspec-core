@@ -7,22 +7,18 @@ Feature: implicit subject
   Scenario: subject in top level group
     Given a file named "top_level_subject_spec.rb" with:
       """
-      require 'rspec/expectations'
-
       describe Array, "when first created" do
         it "should be empty" do
           subject.should == []
         end
       end
       """
-    When I run "rspec top_level_subject_spec.rb"
-    Then I should see "1 example, 0 failures"
+    When I run "rspec ./top_level_subject_spec.rb"
+    Then the output should contain "1 example, 0 failures"
 
   Scenario: subject in a nested group
     Given a file named "nested_subject_spec.rb" with:
       """
-      require 'rspec/expectations'
-
       describe Array do
         describe "when first created" do
           it "should be empty" do
@@ -31,5 +27,5 @@ Feature: implicit subject
         end
       end
       """
-    When I run "rspec nested_subject_spec.rb"
-    Then I should see "1 example, 0 failures"
+    When I run "rspec ./nested_subject_spec.rb"
+    Then the output should contain "1 example, 0 failures"
