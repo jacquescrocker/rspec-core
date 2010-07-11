@@ -2,6 +2,10 @@ module RSpec
   module Core
     class CommandLine
       def initialize(options, configuration=RSpec::configuration, world=RSpec::world)
+        if Array === options
+          options = ConfigurationOptions.new(options)
+          options.parse_options
+        end
         @options       = options
         @configuration = configuration
         @world         = world
@@ -10,7 +14,7 @@ module RSpec
       def run(err, out)
         @options.configure(@configuration)
         @configuration.error_stream = err
-        @configuration.output_stream = out
+        @configuration.output_stream ||= out
         @configuration.require_files_to_run
         @configuration.configure_mock_framework
         @world.announce_inclusion_filter

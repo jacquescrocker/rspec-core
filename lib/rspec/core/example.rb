@@ -49,7 +49,7 @@ module RSpec
                 @in_block = true
                 with_pending_capture &@example_block 
               rescue Exception => e
-                @exception = e
+                set_exception(e)
               ensure
                 @in_block = false
                 run_after_each
@@ -60,13 +60,17 @@ module RSpec
             end.call
           end
         rescue Exception => e
-          @exception ||= e
+          set_exception(e)
         ensure
           @example_group_instance.example = nil
           assign_auto_description
         end
 
         finish(reporter)
+      end
+
+      def set_exception(exception)
+        @exception ||= exception
       end
 
     private
@@ -79,15 +83,7 @@ module RSpec
       end
 
       def with_around_hooks(&wrapped_example)
-        around_hooks_for(@example_group_class).reverse.inject(wrapped_example) do |wrapper, hook|
-          def wrapper.run; call; end
-          lambda { @example_group_instance.instance_exec(wrapper, &hook) }
-        end
-      end
-
-      def around_hooks_for(example_group_class)
-        (RSpec.configuration.hooks[:around][:each] + 
-          @example_group_class.ancestors.reverse.map{|a| a.hooks[:around][:each]}).flatten
+        @example_group_class.eval_around_eachs(@example_group_instance, wrapped_example)
       end
 
       def start(reporter)
