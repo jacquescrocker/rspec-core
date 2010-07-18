@@ -59,14 +59,13 @@ module RSpec
       alias_example_to :focused, :focused => true
       alias_example_to :pending, :pending => true
 
-      def self.it_should_behave_like(*names)
-        names.each do |name|
-          begin
-            module_eval &RSpec.world.shared_example_groups[name]
-          rescue ArgumentError
-            raise "Could not find shared example group named #{name.inspect}"
-          end
-        end
+      def self.it_should_behave_like(name, &customization_block)
+        shared_block = world.shared_example_groups[name]
+        raise "Could not find shared example group named #{name.inspect}" unless shared_block
+
+        shared_group = describe("it should behave like #{name}", &shared_block)
+        shared_group.class_eval &customization_block if customization_block
+        shared_group
       end
 
       def self.examples
@@ -173,11 +172,12 @@ module RSpec
       def self.eval_after_alls(example)
         return if descendant_filtered_examples.empty?
         before_all_ivars.each { |ivar, val| example.instance_variable_set(ivar, val) }
-        ancestors.each {|ancestor| ancestor.run_hook!(:after, :all, example) }
+        run_hook!(:after, :all, example)
         world.run_hook_filtered(:after, :all, self, example)
       end
 
       def self.run(reporter)
+        @reporter = reporter
         example_group_instance = new
         reporter.add_example_group(self)
         begin
@@ -248,7 +248,6 @@ module RSpec
           :extend => extended_modules
         }
       end
-
     end
   end
 end

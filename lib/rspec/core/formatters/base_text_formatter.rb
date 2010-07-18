@@ -14,10 +14,10 @@ module RSpec
             exception = failed_example.execution_result[:exception_encountered]
             padding = '    '
             if exception.is_a?(RSpec::Core::PendingExampleFixedError)
-              output.puts "#{index.next}) #{failed_example} FIXED"
+              output.puts "#{index.next}) #{failed_example.full_description} FIXED"
               output.puts "#{padding}Expected pending '#{failed_example.metadata[:execution_result][:pending_message]}' to fail. No Error was raised."
             else
-              output.puts "#{index.next}) #{failed_example}"
+              output.puts "#{index.next}) #{failed_example.full_description}"
               output.puts "#{padding}Failure/Error: #{read_failed_line(exception, failed_example).strip}"
               exception.message.split("\n").each do |line|
                 output.puts "#{padding}#{red(line)}"
@@ -72,8 +72,9 @@ module RSpec
             output.puts
             output.puts "Pending:"
             pending_examples.each do |pending_example|
-              output.puts "  #{pending_example} (#{pending_example.metadata[:execution_result][:pending_message]})"
-              output.puts grey("   # #{format_caller(pending_example.metadata[:location])}")
+              output.puts yellow("  #{pending_example.full_description}")
+              output.puts grey("    # #{pending_example.metadata[:execution_result][:pending_message]}")
+              output.puts grey("    # #{format_caller(pending_example.metadata[:location])}")
             end
           end
         end
@@ -127,7 +128,7 @@ module RSpec
         end
 
         def format_caller(caller_info)
-          caller_info.to_s.split(':in `block').first
+          backtrace_line(caller_info.to_s.split(':in `block').first)
         end
 
       end

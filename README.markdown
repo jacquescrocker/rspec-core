@@ -4,7 +4,7 @@ Behaviour Driven Development for Ruby
 
 ## Upgrading from rspec-1.x
 
-See Upgrade.markdown
+See [Upgrade.markdown](http://github.com/rspec/rspec-core/blob/master/Upgrade.markdown)
 
 ## Install
 
@@ -62,6 +62,10 @@ Use the documentation formatter to see the resulting spec:
 
     Finished in 0.000379 seconds
     1 example, 0 failures
+
+## Known issues
+
+See [http://github.com/rspec/rspec-core/issues](http://github.com/rspec/rspec-core/issues)
 
 ## Learn more
 

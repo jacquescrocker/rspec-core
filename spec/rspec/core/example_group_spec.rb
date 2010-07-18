@@ -257,20 +257,36 @@ module RSpec::Core
       it "runs before all, before each, example, after each, after all, in that order" do
         group = ExampleGroup.describe
         order = []
-        group.after(:all)   { order << :after_all   }
-        group.after(:each)  { order << :after_each  }
+        group.before(:all)  { order << :top_level_before_all  }
         group.before(:each) { order << :before_each }
-        group.before(:all)  { order << :before_all  }
-        group.example("example") { order << :example }
+        group.after(:each)  { order << :after_each  }
+        group.after(:all)   { order << :top_level_after_all   }
+        group.example("top level example") { order << :top_level_example }
+
+        context1 = group.describe("context 1")
+        context1.before(:all) { order << :nested_before_all }
+        context1.example("nested example 1") { order << :nested_example_1 }
+
+        context2 = group.describe("context 2")
+        context2.after(:all) { order << :nested_after_all }
+        context2.example("nested example 2") { order << :nested_example_2 }
 
         group.run_all
 
         order.should == [
-          :before_all,
+          :top_level_before_all,
           :before_each,
-          :example,
+          :top_level_example,
           :after_each,
-          :after_all
+          :nested_before_all,
+          :before_each,
+          :nested_example_1,
+          :after_each,
+          :before_each,
+          :nested_example_2,
+          :after_each,
+          :nested_after_all,
+          :top_level_after_all
         ]
       end
 
@@ -510,6 +526,18 @@ module RSpec::Core
           end.new
         end
         its(:nil_value) { should be_nil }
+      end
+
+      context "with nested attributes" do
+        subject do
+          Class.new do
+            def name
+              "John"
+            end
+          end.new
+        end
+        its("name.size") { should == 4 }
+        its("name.size.class") { should == Fixnum }
       end
     end
 

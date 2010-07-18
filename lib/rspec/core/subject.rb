@@ -3,9 +3,11 @@ module RSpec
     module Subject
 
       def self.included(kls)
-        kls.extend   ClassMethods
-        kls.__send__ :alias_method, :__should_for_example_group__,     :should
-        kls.__send__ :alias_method, :__should_not_for_example_group__, :should_not
+        kls.class_eval do
+          extend ClassMethods
+          alias_method :__should_for_example_group__,     :should
+          alias_method :__should_not_for_example_group__, :should_not
+        end
       end
 
       def subject
@@ -80,7 +82,11 @@ module RSpec
       end
 
       def attribute_of_subject
-        original_subject.send(example.description) if using_attribute?
+        if using_attribute?
+          example.description.split('.').inject(original_subject) do |target, method|
+            target.send(method)
+          end
+        end
       end
 
       def using_attribute?
